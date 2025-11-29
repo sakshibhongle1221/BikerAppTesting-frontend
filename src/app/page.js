@@ -1,16 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { auth, provider } from "../firebaseConfig";
 import { API_BASE_URL } from "../config";
 import Link from "next/link";
 
 export default function Home() {
+  const router = useRouter();
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [bikes, setBikes] = useState([]);
   const [loadingBikes, setLoadingBikes] = useState(false);
   const [error, setError] = useState("");
+  const [checkingProfile, setCheckingProfile] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -76,12 +79,49 @@ export default function Home() {
   };
 
   useEffect(() => {
+    async function checkProfile() {
+      if (!user) return;
+
+      setCheckingProfile(true);
+
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+
+        const res = await fetch(`${API_BASE_URL}/api/user/profile`, {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to check profile");
+        }
+
+        const data = await res.json();
+
+        if (!data.profile) {
+          router.push("/profile/setup");
+        }
+      } catch (err) {
+        console.error("Error checking profile:", err);
+      } finally {
+        setCheckingProfile(false);
+      }
+    }
+
     if (user) {
+      checkProfile();
+    }
+
+  }, [user]);
+
+  useEffect(() => {
+    if (user && !checkingProfile) {
       fetchBikes();
     } else {
       setBikes([]);
     }
-  }, [user]);
+  }, [user, checkingProfile]);
 
   if (loadingUser) {
     return (
@@ -98,7 +138,7 @@ export default function Home() {
           <div>
             <h1 className="text-3xl font-bold mb-2 text-center">Bikers App</h1>
             <p className="text-gray-300 text-center">
-              Sign in with Google to explore different bikes.
+              Sign in with Google to explore different bikes. 
             </p>
           </div>
 
@@ -119,15 +159,23 @@ export default function Home() {
 
           <p className="text-xs text-gray-500 text-center">
             We use Firebase Authentication to securely sign you in with your
-            Google account.
+            Google account. 
           </p>
         </div>
       </main>
     );
   }
 
+  if (checkingProfile) {
+    return (
+      <main className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <p className="text-gray-300">Loading your profile...</p>
+      </main>
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center px-4">
+    <main className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center px-4 py-8">
       <div className="max-w-2xl w-full space-y-6">
         <div className="flex justify-between items-center">
           <div>
@@ -139,16 +187,17 @@ export default function Home() {
 
           <div>
             <div className="flex items-center space-x-3">
-              {user.photoURL && (
-                <img
-                  src={user.photoURL}
-                  alt="User avatar"
-                  className="w-10 h-10 rounded-full"
-                />
+              {user. photoURL && (
+              <Link href="/profile">
+               <img
+                src={user.photoURL}
+                alt="User avatar"
+                className="w-10 h-10 rounded-full cursor-pointer hover:ring-2 hover:ring-blue-500 transition"
+               />
+              </Link>
               )}
               <div className="text-sm">
                 <p className="font-semibold">{user.displayName}</p>
-                <p className="text-gray-400 text-xs">{user.email}</p>
               </div>
               <button
                 onClick={handleLogout}
