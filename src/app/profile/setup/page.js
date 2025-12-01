@@ -12,7 +12,11 @@ export default function ProfileSetupPage() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   const [name, setName] = useState("");
-  const [bikeName, setBikeName] = useState("");
+  const [selectedBikeId, setSelectedBikeId] = useState("");
+  
+  const [bikes, setBikes] = useState([]);
+  const [loadingBikes, setLoadingBikes] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -25,10 +29,50 @@ export default function ProfileSetupPage() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    async function fetchBikes() {
+      if (! user) return;
+
+      setLoadingBikes(true);
+      setError("");
+
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+
+        const res = await fetch(`${API_BASE_URL}/api/bikes`, {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        });
+
+        if (!res.ok) {
+          const errData = await res.json(). catch(() => ({}));
+          throw new Error(errData.error || "Failed to fetch bikes");
+        }
+
+        const data = await res.json();
+        setBikes(data. bikes || []);
+      } catch (err) {
+        console. error("Error fetching bikes:", err);
+        setError(err. message || "Error fetching bikes");
+      } finally {
+        setLoadingBikes(false);
+      }
+    }
+
+    if (user) {
+      fetchBikes();
+    }
+  }, [user]);
+
   const handleSave = async (e) => {
     e. preventDefault();
-    if (!name. trim() || !bikeName.trim()) {
-      setError("Both name and bike name are required.");
+    if (!name. trim()) {
+      setError("Name is required.");
+      return;
+    }
+    if (!selectedBikeId) {
+      setError("Please select a bike.");
       return;
     }
 
@@ -44,7 +88,7 @@ export default function ProfileSetupPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ name, bikeName }),
+        body: JSON.stringify({ name, bikeId: selectedBikeId }),
       });
 
       if (!res.ok) {
@@ -55,7 +99,7 @@ export default function ProfileSetupPage() {
       router.push("/profile");
     } catch (err) {
       console.error("Error saving profile:", err);
-      setError(err. message || "Error saving profile");
+      setError(err.message || "Error saving profile");
     } finally {
       setSaving(false);
     }
@@ -83,7 +127,7 @@ export default function ProfileSetupPage() {
         <div>
           <h1 className="text-3xl font-bold mb-2">Welcome! </h1>
           <p className="text-gray-300">
-            Let's set up your profile.  Tell us your name and the bike you ride.
+            Let's set up your profile.  Tell us your name and select the bike you ride.
           </p>
         </div>
 
@@ -106,23 +150,36 @@ export default function ProfileSetupPage() {
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              Your Bike Name
+              Select Your Bike
             </label>
-            <input
-              type="text"
-              value={bikeName}
-              onChange={(e) => setBikeName(e.target. value)}
-              className="w-full px-3 py-2 bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. Royal Enfield Classic 350"
-              required
-            />
+            {loadingBikes ? (
+              <p className="text-gray-400 text-sm">Loading bikes...</p>
+            ) : bikes.length === 0 ? (
+              <p className="text-gray-400 text-sm">
+                No bikes available. Please add bikes to Firestore.
+              </p>
+            ) : (
+              <select
+                value={selectedBikeId}
+                onChange={(e) => setSelectedBikeId(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Choose a bike: </option>
+                {bikes.map((bike) => (
+                  <option key={bike.id} value={bike. id}>
+                    {bike. name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || loadingBikes}
             className={`w-full px-4 py-2 rounded font-semibold ${
-              saving
+              saving || loadingBikes
                 ? "bg-gray-600 cursor-not-allowed"
                 : "bg-blue-500 hover:bg-blue-600"
             }`}

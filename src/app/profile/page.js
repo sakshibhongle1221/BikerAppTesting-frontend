@@ -13,11 +13,15 @@ export default function ProfilePage() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   const [profile, setProfile] = useState(null);
+  const [bike, setBike] = useState(null); 
   const [loadingProfile, setLoadingProfile] = useState(true);
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
-  const [bikeName, setBikeName] = useState("");
+  const [selectedBikeId, setSelectedBikeId] = useState("");
+  const [bikes, setBikes] = useState([]);
+  const [loadingBikes, setLoadingBikes] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -38,7 +42,7 @@ export default function ProfilePage() {
       setError("");
 
       try {
-        const idToken = await auth. currentUser.getIdToken();
+        const idToken = await auth.currentUser.getIdToken();
 
         const res = await fetch(`${API_BASE_URL}/api/user/profile`, {
           headers: {
@@ -59,8 +63,24 @@ export default function ProfilePage() {
         }
 
         setProfile(data.profile);
-        setName(data. profile.name || "");
-        setBikeName(data.profile. bikeName || "");
+        setName(data.profile.name || "");
+        setSelectedBikeId(data.profile.bikeId || "");
+
+        if (data.profile.bikeId) {
+          const bikeRes = await fetch(
+            `${API_BASE_URL}/api/bikes/${data. profile.bikeId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${idToken}`,
+              },
+            }
+          );
+
+          if (bikeRes.ok) {
+            const bikeData = await bikeRes.json();
+            setBike(bikeData. bike);
+          }
+        }
       } catch (err) {
         console.error("Error fetching profile:", err);
         setError(err.message || "Error fetching profile");
@@ -75,10 +95,39 @@ export default function ProfilePage() {
 
   }, [user]);
 
+  const handleEditClick = async () => {
+    setEditing(true);
+    setLoadingBikes(true);
+    setError("");
+
+    try {
+      const idToken = await auth. currentUser.getIdToken();
+
+      const res = await fetch(`${API_BASE_URL}/api/bikes`, {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to fetch bikes");
+      }
+
+      const data = await res.json();
+      setBikes(data. bikes || []);
+    } catch (err) {
+      console. error("Error fetching bikes:", err);
+      setError(err. message || "Error fetching bikes");
+    } finally {
+      setLoadingBikes(false);
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !bikeName. trim()) {
-      setError("Both name and bike name are required.");
+    if (!name.trim() || !selectedBikeId) {
+      setError("Name and bike are required.");
       return;
     }
 
@@ -86,7 +135,7 @@ export default function ProfilePage() {
     setError("");
 
     try {
-      const idToken = await auth. currentUser.getIdToken();
+      const idToken = await auth.currentUser.getIdToken();
 
       const res = await fetch(`${API_BASE_URL}/api/user/profile`, {
         method: "POST",
@@ -94,7 +143,7 @@ export default function ProfilePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ name, bikeName }),
+        body: JSON.stringify({ name, bikeId: selectedBikeId }),
       });
 
       if (!res.ok) {
@@ -102,11 +151,24 @@ export default function ProfilePage() {
         throw new Error(errData.error || "Failed to save profile");
       }
 
-      const data = await res.json();
-      setProfile({ ...profile, name, bikeName });
+      const bikeRes = await fetch(
+        `${API_BASE_URL}/api/bikes/${selectedBikeId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        }
+      );
+
+      if (bikeRes.ok) {
+        const bikeData = await bikeRes.json();
+        setBike(bikeData.bike);
+      }
+
+      setProfile({ ...profile, name, bikeId: selectedBikeId });
       setEditing(false);
     } catch (err) {
-      console. error("Error saving profile:", err);
+      console.error("Error saving profile:", err);
       setError(err.message || "Error saving profile");
     } finally {
       setSaving(false);
@@ -144,9 +206,9 @@ export default function ProfilePage() {
           <h1 className="text-3xl font-bold">Your Profile</h1>
           <Link
             href="/"
-            className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold"
           >
-            Back to dasboard
+            Back to dashboard
           </Link>
         </div>
 
@@ -154,7 +216,7 @@ export default function ProfilePage() {
           <div className="px-3 py-2 bg-red-800 text-sm rounded">{error}</div>
         )}
 
-        {! editing ? (
+        {!editing ? (
           <div className="space-y-4">
             <div>
               <p className="text-xs text-gray-400 uppercase">Name</p>
@@ -163,7 +225,13 @@ export default function ProfilePage() {
 
             <div>
               <p className="text-xs text-gray-400 uppercase">Your Bike</p>
-              <p className="text-lg font-semibold">{profile?.bikeName}</p>
+              {bike ? (
+                <div className="mt-2 bg-gray-700 rounded-lg p-4 space-y-2">             
+                  <p className="text-lg font-semibold">{bike.name}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">No bike selected</p>
+              )}
             </div>
 
             <div>
@@ -172,7 +240,7 @@ export default function ProfilePage() {
             </div>
 
             <button
-              onClick={() => setEditing(true)}
+              onClick={handleEditClick}
               className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded font-semibold"
             >
               Edit Profile
@@ -195,23 +263,35 @@ export default function ProfilePage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">
-                Your Bike Name
+                Select Your Bike
               </label>
-              <input
-                type="text"
-                value={bikeName}
-                onChange={(e) => setBikeName(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
+              {loadingBikes ? (
+                <p className="text-gray-400 text-sm">Loading bikes...</p>
+              ) : bikes.length === 0 ? (
+                <p className="text-gray-400 text-sm">No bikes available</p>
+              ) : (
+                <select
+                  value={selectedBikeId}
+                  onChange={(e) => setSelectedBikeId(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Choose a bike: </option>
+                  {bikes.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="flex space-x-3">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || loadingBikes}
                 className={`flex-1 px-4 py-2 rounded font-semibold ${
-                  saving
+                  saving || loadingBikes
                     ? "bg-gray-600 cursor-not-allowed"
                     : "bg-green-500 hover:bg-green-600"
                 }`}
@@ -223,7 +303,7 @@ export default function ProfilePage() {
                 onClick={() => {
                   setEditing(false);
                   setName(profile?.name || "");
-                  setBikeName(profile?.bikeName || "");
+                  setSelectedBikeId(profile?.bikeId || "");
                   setError("");
                 }}
                 className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded font-semibold"
